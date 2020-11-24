@@ -114,9 +114,7 @@ _product_single_value_vars :=
 # Variables that are lists of values.
 _product_list_vars :=
 
-# Add support to override build.prop values
 _product_list_vars += PRODUCT_BUILD_PROP_OVERRIDES
-
 _product_single_value_vars += PRODUCT_NAME
 _product_single_value_vars += PRODUCT_MODEL
 
@@ -307,6 +305,15 @@ _product_single_value_vars += PRODUCT_MINIMIZE_JAVA_DEBUG_INFO
 
 # Whether any paths are excluded from sanitization when SANITIZE_TARGET=integer_overflow
 _product_list_vars += PRODUCT_INTEGER_OVERFLOW_EXCLUDE_PATHS
+
+# Whether any paths should have INTEGER OVERFLOW enabled for components
+_product_var_list += PRODUCT_INTEGER_OVERFLOW_INCLUDE_PATHS
+
+# Whether any paths are excluded from sanitization when SANITIZE_TARGET=bounds
+_product_var_list += PRODUCT_BOUNDS_EXCLUDE_PATHS
+
+# Whether any paths should have ubsan  enabled for components
+_product_var_list += PRODUCT_BOUNDS_INCLUDE_PATHS
 
 _product_single_value_vars += PRODUCT_ADB_KEYS
 

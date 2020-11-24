@@ -61,7 +61,6 @@ PRODUCT_PACKAGES += \
     PrintSpooler \
     ProxyHandler \
     screenrecord \
-    SecureElement \
     SharedStorageBackup \
     SimAppDialog \
     Telecom \
@@ -73,6 +72,11 @@ PRODUCT_PACKAGES += \
     vr \
 
 
+ifneq ($(TARGET_HAS_LOW_RAM), true)
+PRODUCT_PACKAGES += \
+    SecureElement
+endif
+
 PRODUCT_SYSTEM_SERVER_APPS += \
     FusedLocation \
     InputDevices \
@@ -83,10 +87,6 @@ PRODUCT_COPY_FILES += \
     frameworks/av/media/libeffects/data/audio_effects.conf:system/etc/audio_effects.conf
 
 PRODUCT_PROPERTY_OVERRIDES += \
-    ro.carrier=unknown
-
-ifeq ($(AOSP_BUILD),)
-PRODUCT_PROPERTY_OVERRIDES += \
+    ro.carrier=unknown \
     ro.config.notification_sound=OnTheHunt.ogg \
     ro.config.alarm_alert=Alarm_Classic.ogg
-endif

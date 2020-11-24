@@ -377,22 +377,6 @@ KNOWN_OEM_THUMBPRINT_PROPERTIES := \
 OEM_THUMBPRINT_PROPERTIES := $(filter $(KNOWN_OEM_THUMBPRINT_PROPERTIES),\
     $(PRODUCT_OEM_PROPERTIES))
 
-# Display parameters shown under Settings -> About Phone
-ifeq ($(TARGET_BUILD_VARIANT),user)
-  # User builds should show:
-  # release build number or branch.buld_number non-release builds
-
-  # Dev. branches should have DISPLAY_BUILD_NUMBER set
-  ifeq (true,$(DISPLAY_BUILD_NUMBER))
-    BUILD_DISPLAY_ID := $(BUILD_ID).$(BUILD_NUMBER_FROM_FILE) $(BUILD_KEYS)
-  else
-    BUILD_DISPLAY_ID := $(BUILD_ID) $(BUILD_KEYS)
-  endif
-else
-  # Non-user builds should show detailed build information
-  BUILD_DISPLAY_ID := $(build_desc)
-endif
-
 # Accepts a whitespace separated list of product locales such as
 # (en_US en_AU en_GB...) and returns the first locale in the list with
 # underscores replaced with hyphens. In the example above, this will
@@ -438,12 +422,12 @@ endif
 	$(hide) TARGET_BUILD_TYPE="$(TARGET_BUILD_VARIANT)" \
 	        TARGET_BUILD_FLAVOR="$(TARGET_BUILD_FLAVOR)" \
 	        TARGET_DEVICE="$(TARGET_DEVICE)" \
-	        AOSP_DEVICE="$(TARGET_DEVICE)" \
+	        EXTENDED_DEVICE="$(TARGET_DEVICE)" \
 	        PRODUCT_DEFAULT_LOCALE="$(call get-default-product-locale,$(PRODUCT_LOCALES))" \
 	        PRODUCT_DEFAULT_WIFI_CHANNELS="$(PRODUCT_DEFAULT_WIFI_CHANNELS)" \
-	        PRIVATE_BUILD_DESC="$(PRIVATE_BUILD_DESC)" \
 	        BUILD_ID="$(BUILD_ID)" \
-	        BUILD_DISPLAY_ID="$(BUILD_DISPLAY_ID)" \
+	        BUILD_KEYS="$(BUILD_KEYS)" \
+	        DISPLAY_BUILD_NUMBER="$(DISPLAY_BUILD_NUMBER)" \
 	        DATE="$(DATE_FROM_FILE)" \
 	        BUILD_USERNAME="$(BUILD_USERNAME)" \
 	        BUILD_HOSTNAME="$(BUILD_HOSTNAME)" \
@@ -452,7 +436,6 @@ endif
 	        PLATFORM_VERSION="$(PLATFORM_VERSION)" \
 	        PLATFORM_VERSION_LAST_STABLE="$(PLATFORM_VERSION_LAST_STABLE)" \
 	        PLATFORM_SECURITY_PATCH="$(PLATFORM_SECURITY_PATCH)" \
-	        PLATFORM_SECURITY_PATCH_EX="$(PLATFORM_SECURITY_PATCH_EX)" \
 	        PLATFORM_BASE_OS="$(PLATFORM_BASE_OS)" \
 	        PLATFORM_SDK_VERSION="$(PLATFORM_SDK_VERSION)" \
 	        PLATFORM_PREVIEW_SDK_VERSION="$(PLATFORM_PREVIEW_SDK_VERSION)" \
@@ -651,6 +634,13 @@ $(INSTALLED_ODM_BUILD_PROP_TARGET): $(BUILDINFO_COMMON_SH) $(POST_PROCESS_PROPS)
 	        echo "#" >> $@;
 	$(hide) $(foreach line,$(FINAL_ODM_BUILD_PROPERTIES), \
 	    echo "$(line)" >> $@;)
+ifeq (true,$(TARGET_FWK_SUPPORTS_FULL_VALUEADDS))
+	$(hide) echo ro.vendor.qti.va_odm.support="1">>$@
+	$(warning "Compile using ODM with QC value-adds...")
+else
+	$(hide) echo ro.vendor.qti.va_odm.support="0">>$@
+	$(warning "Compile using ODM from Pure AOSP...")
+endif
 	$(hide) $(POST_PROCESS_PROPS) $@
 
 # -----------------------------------------------------------------
@@ -1241,11 +1231,6 @@ else
 ifdef GENERIC_KERNEL_CMDLINE
   INTERNAL_BOOTIMAGE_ARGS += --cmdline "$(GENERIC_KERNEL_CMDLINE)"
 endif
-endif
-
-ifneq (,$(PLATFORM_SECURITY_PATCH_OVERRIDE))
-      PLATFORM_SECURITY_PATCH_EX := $(PLATFORM_SECURITY_PATCH)
-      PLATFORM_SECURITY_PATCH := $(PLATFORM_SECURITY_PATCH_OVERRIDE)
 endif
 
 INTERNAL_MKBOOTIMG_VERSION_ARGS := \
@@ -1937,9 +1922,6 @@ recovery_kernel := $(INSTALLED_KERNEL_TARGET) # same as a non-recovery system
 recovery_ramdisk := $(PRODUCT_OUT)/ramdisk-recovery.img
 recovery_resources_common := $(call include-path-for, recovery)/res
 
-ifneq (,$(TARGET_RECOVERY_DENSITY))
-recovery_density := $(filter %dpi,$(TARGET_RECOVERY_DENSITY))
-else
 # Set recovery_density to a density bucket based on TARGET_SCREEN_DENSITY, PRODUCT_AAPT_PREF_CONFIG,
 # or mdpi, in order of preference. We support both specific buckets (e.g. xdpi) and numbers,
 # which get remapped to a bucket.
@@ -1954,7 +1936,6 @@ recovery_density := $(strip \
        $(if $(filter $(shell echo $$(($(recovery_density_value) >= 400))),1),xxhdpi),\
        $(if $(filter $(shell echo $$(($(recovery_density_value) >= 280))),1),xhdpi),\
        $(if $(filter $(shell echo $$(($(recovery_density_value) >= 200))),1),hdpi,mdpi)))
-endif
 endif
 
 ifneq (,$(wildcard $(recovery_resources_common)-$(recovery_density)))
@@ -2243,9 +2224,6 @@ $(recovery_ramdisk): $(MKBOOTFS) $(COMPRESSION_COMMAND_DEPS) \
 # $(1): output file
 # $(2): kernel file
 define build-recoveryimage-target
-  @echo "Generating Changelog"
-  bash vendor/aosp/tools/changelog "$(PRODUCT_OUT)"
-  $(hide) mv $(PRODUCT_OUT)/Changelog.txt $(PRODUCT_OUT)/AospExtended-$(EXTENDED_VERSION)-$(EXTENDED_BUILD_DATE)-Changelog.txt
   $(if $(filter true,$(PRODUCT_SUPPORTS_VBOOT)), \
     $(MKBOOTIMG) --kernel $(2) $(INTERNAL_RECOVERYIMAGE_ARGS) \
                  $(INTERNAL_MKBOOTIMG_VERSION_ARGS) $(BOARD_RECOVERY_MKBOOTIMG_ARGS) \
@@ -3102,7 +3080,7 @@ endif
 systemotherimage-nodeps: | $(INTERNAL_USERIMAGES_DEPS)
 	$(build-systemotherimage-target)
 
-endif # BUILDING_SYSTEM_OTHER_IMAGE
+endif # BOARD_USES_SYSTEM_OTHER
 
 
 # -----------------------------------------------------------------
@@ -3507,6 +3485,33 @@ BOARD_AVB_DTBO_ADD_HASH_FOOTER_ARGS += \
     --prop com.android.build.dtbo.fingerprint:$(BUILD_FINGERPRINT_FROM_FILE)
 
 # The following vendor- and odm-specific images needs explicit SPL set per board.
+ifdef BOOT_SECURITY_PATCH
+BOARD_AVB_BOOT_ADD_HASH_FOOTER_ARGS += \
+    --prop com.android.build.boot.security_patch:$(BOOT_SECURITY_PATCH)
+endif
+
+ifdef VENDOR_SECURITY_PATCH
+BOARD_AVB_VENDOR_ADD_HASHTREE_FOOTER_ARGS += \
+    --prop com.android.build.vendor.security_patch:$(VENDOR_SECURITY_PATCH)
+endif
+
+ifdef ODM_SECURITY_PATCH
+BOARD_AVB_ODM_ADD_HASHTREE_FOOTER_ARGS += \
+    --prop com.android.build.odm.security_patch:$(ODM_SECURITY_PATCH)
+endif
+
+# Appends security patch level as a AVB property descriptor
+
+BOARD_AVB_SYSTEM_ADD_HASHTREE_FOOTER_ARGS += \
+    --prop com.android.build.system.security_patch:$(PLATFORM_SECURITY_PATCH)
+
+BOARD_AVB_PRODUCT_ADD_HASHTREE_FOOTER_ARGS += \
+    --prop com.android.build.product.security_patch:$(PLATFORM_SECURITY_PATCH)
+
+BOARD_AVB_PRODUCT_SERVICES_ADD_HASHTREE_FOOTER_ARGS += \
+    --prop com.android.build.product_services.security_patch:$(PLATFORM_SECURITY_PATCH)
+
+# The following vendor- and odm-specific images needs explicitly set per board.
 ifdef BOOT_SECURITY_PATCH
 BOARD_AVB_BOOT_ADD_HASH_FOOTER_ARGS += \
     --prop com.android.build.boot.security_patch:$(BOOT_SECURITY_PATCH)
@@ -3934,8 +3939,8 @@ my_decompress_tools := \
 $(BUILT_KERNEL_CONFIGS_FILE): .KATI_IMPLICIT_OUTPUTS := $(BUILT_KERNEL_VERSION_FILE)
 $(BUILT_KERNEL_CONFIGS_FILE): PRIVATE_DECOMPRESS_TOOLS := $(my_decompress_tools)
 $(BUILT_KERNEL_CONFIGS_FILE): $(foreach pair,$(my_decompress_tools),$(call word-colon,2,$(pair)))
-$(BUILT_KERNEL_CONFIGS_FILE): $(EXTRACT_KERNEL) $(INSTALLED_KERNEL_TARGET)
-	$< --tools $(PRIVATE_DECOMPRESS_TOOLS) --input $(INSTALLED_KERNEL_TARGET) \
+$(BUILT_KERNEL_CONFIGS_FILE): $(EXTRACT_KERNEL) $(firstword $(INSTALLED_KERNEL_TARGET))
+	$< --tools $(PRIVATE_DECOMPRESS_TOOLS) --input $(firstword $(INSTALLED_KERNEL_TARGET)) \
 	  --output-configs $@ \
 	  --output-version $(BUILT_KERNEL_VERSION_FILE)
 
@@ -4305,7 +4310,6 @@ endif
 	$(hide) echo 'mkbootimg_args=$(BOARD_MKBOOTIMG_ARGS)' >> $@
 	$(hide) echo 'recovery_mkbootimg_args=$(BOARD_RECOVERY_MKBOOTIMG_ARGS)' >> $@
 	$(hide) echo 'mkbootimg_version_args=$(INTERNAL_MKBOOTIMG_VERSION_ARGS)' >> $@
-	$(hide) echo "use_set_metadata=1" >> $@
 	$(hide) echo "multistage_support=1" >> $@
 	$(hide) echo "blockimgdiff_versions=3,4" >> $@
 ifeq ($(PRODUCT_BUILD_GENERIC_OTA_PACKAGE),true)
@@ -4773,6 +4777,7 @@ endif
 	$(hide) echo "$(PRODUCT_OTA_PUBLIC_KEYS)" > $(zip_root)/META/otakeys.txt
 	$(hide) cp $(SELINUX_FC) $(zip_root)/META/file_contexts.bin
 	$(hide) cp $(INSTALLED_MISC_INFO_TARGET) $(zip_root)/META/misc_info.txt
+	$(hide) echo "use_set_metadata=1" >> $(zip_root)/META/misc_info.txt
 ifneq ($(PRODUCT_SYSTEM_BASE_FS_PATH),)
 	$(hide) cp $(PRODUCT_SYSTEM_BASE_FS_PATH) \
 	  $(zip_root)/META/$(notdir $(PRODUCT_SYSTEM_BASE_FS_PATH))
@@ -4962,10 +4967,10 @@ else
     OTA_SCRIPT_OVERRIDE_DEVICE := $(TARGET_OTA_ASSERT_DEVICE)
 endif
 
-ifeq ($(TARGET_BUILD_VARIANT),user)
+ifeq ($(WITH_GMS),true)
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
 else
-ifneq ($(AOSP_BUILD),)
+ifneq ($(EXTENDED_BUILD),)
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := true
 else
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
@@ -4977,8 +4982,20 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(OTA_FROM_TARGET_
 	@echo "Package OTA: $@"
 	$(call build-ota-package-target,$@,-k $(KEY_CERT_PAIR) --backup=$(backuptool) --output_metadata_path $(INTERNAL_OTA_METADATA))
 
-.PHONY: otapackage
+TARGET_PACKAGE := $(PRODUCT_OUT)/CAFExtended-$(CAFEX_VERSION)-$(TARGET_DEVICE)-$(CAFEX_BUILD_DATE)-$(CAFEX_BUILD_TYPE).zip
+
+.PHONY: otapackage bacon cafex
 otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
+bacon: otapackage
+bacon: cafex
+cafex: otapackage
+	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(TARGET_PACKAGE)
+	$(hide) $(MD5) $(TARGET_PACKAGE) > $(TARGET_PACKAGE).md5sum
+	@echo -e ${CL_BLD}${CL_CYN}"===============================-Package complete-==============================="${CL_RST}
+	@echo -e ${CL_BLD}${CL_YLW}"Zip: "${CL_YLW} $(TARGET_PACKAGE)${CL_RST}
+	@echo -e ${CL_BLD}${CL_YLW}"MD5: "${CL_YLW}" `cat $(TARGET_PACKAGE).md5sum | awk '{print $$1}' `"${CL_RST}
+	@echo -e ${CL_BLD}${CL_YLW}"Size:"${CL_YLW}" `du -sh $(TARGET_PACKAGE) | awk '{print $$1}' `"${CL_RST}
+	@echo -e ${CL_BLD}${CL_CYN}"================================================================================"${CL_RST}
 
 ifeq ($(BOARD_BUILD_RETROFIT_DYNAMIC_PARTITIONS_OTA_PACKAGE),true)
 name := $(TARGET_PRODUCT)
@@ -5636,3 +5653,17 @@ $(call dist-for-goals,haiku,$(SOONG_FUZZ_PACKAGING_ARCH_MODULES))
 # -----------------------------------------------------------------
 # The makefile for haiku line coverage.
 include $(BUILD_SYSTEM)/line_coverage.mk
+
+ifeq (true,$(PRODUCT_USE_DYNAMIC_PARTITIONS))
+define build-dynamic-partition-metadata
+    $(if $(filter true,$(AB_OTA_UPDATER)), \
+       echo "ab_update=true" >> $(PRODUCT_OUT)/dynamic_partition_metadata.txt)
+    $(call dump-dynamic-partitions-info,$(PRODUCT_OUT)/dynamic_partition_metadata.txt)
+endef
+
+.PHONY: BUILT_DYNAMIC_INFORMATION
+BUILT_DYNAMIC_INFORMATION:
+	@rm -f $(PRODUCT_OUT)/dynamic_partition_metadata.txt
+	$(call build-dynamic-partition-metadata)
+droidcore: BUILT_DYNAMIC_INFORMATION
+endif

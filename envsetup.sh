@@ -37,7 +37,7 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 
 EOF
 
-    __print_aosp_functions_help
+    __print_cafex_functions_help
 
 cat <<EOF
 
@@ -50,7 +50,7 @@ EOF
     local T=$(gettop)
     local A=""
     local i
-    for i in `cat $T/build/envsetup.sh $T/vendor/aosp/build/envsetup.sh | sed -n "/^[[:blank:]]*function /s/function \([a-z_]*\).*/\1/p" | sort | uniq`; do
+    for i in `cat $T/build/envsetup.sh $T/vendor/extended/build/envsetup.sh | sed -n "/^[[:blank:]]*function /s/function \([a-z_]*\).*/\1/p" | sort | uniq`; do
       A="$A $i"
     done
     echo $A
@@ -61,8 +61,8 @@ function build_build_var_cache()
 {
     local T=$(gettop)
     # Grep out the variable names from the script.
-    cached_vars=(`cat $T/build/envsetup.sh $T/vendor/aosp/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
-    cached_abs_vars=(`cat $T/build/envsetup.sh $T/vendor/aosp/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_abs_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
+    cached_vars=(`cat $T/build/envsetup.sh $T/vendor/extended/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
+    cached_abs_vars=(`cat $T/build/envsetup.sh $T/vendor/extended/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_abs_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
     # Call the build system to dump the "<val>=<value>" pairs as a shell script.
     build_dicts_script=`\builtin cd $T; build/soong/soong_ui.bash --dumpvars-mode \
                         --vars="${cached_vars[*]}" \
@@ -144,12 +144,12 @@ function check_product()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
-    if (echo -n $1 | grep -q -e "^aosp_") ; then
-        AOSP_BUILD=$(echo -n $1 | sed -e 's/^aosp_//g')
+    if (echo -n $1 | grep -q -e "^cafex_") ; then
+        EXTENDED_BUILD=$(echo -n $1 | sed -e 's/^cafex_//g')
     else
-        AOSP_BUILD=
+        EXTENDED_BUILD=
     fi
-    export AOSP_BUILD
+    export EXTENDED_BUILD
 
         TARGET_PRODUCT=$1 \
         TARGET_BUILD_VARIANT= \
@@ -598,7 +598,7 @@ function print_lunch_menu()
 
     local i=1
     local choice
-    for choice in ${choices[@]}
+    for choice in $(echo $choices)
     do
         echo "     $i. $choice"
         i=$(($i+1))
@@ -610,19 +610,6 @@ function print_lunch_menu()
 function lunch()
 {
     local answer
-
-    choices=()
-    for makefile_target in $(TARGET_BUILD_APPS= get_build_var COMMON_LUNCH_CHOICES)
-    do
-        choices+=($makefile_target)
-    done
-    for other_target in ${lunch_others_targets[@]}
-    do
-        if [[ " ${choices[*]} " != *"$other_target"* ]];
-        then
-            choices+=($other_target)
-        fi
-    done
 
     if [ "$1" ] ; then
         answer=$1
@@ -639,6 +626,7 @@ function lunch()
         selection=aosp_arm-eng
     elif (echo -n $answer | grep -q -e "^[0-9][0-9]*$")
     then
+        local choices=($(TARGET_BUILD_APPS= get_build_var COMMON_LUNCH_CHOICES))
         if [ $answer -le ${#choices[@]} ]
         then
             # array in zsh starts from 1 instead of 0.
@@ -674,20 +662,6 @@ function lunch()
     fi
 
     check_product $product
-    if [ $? -ne 0 ]
-    then
-        # if we can't find a product, try to grab it off the AospExtended GitHub
-        T=$(gettop)
-        cd $T > /dev/null
-        vendor/aosp/build/tools/roomservice.py $product
-        cd - > /dev/null
-        check_product $product
-    else
-        T=$(gettop)
-        cd $T > /dev/null
-        vendor/aosp/build/tools/roomservice.py $product true
-        cd - > /dev/null
-    fi
 
     TARGET_PRODUCT=$product \
     TARGET_BUILD_VARIANT=$variant \
@@ -695,15 +669,6 @@ function lunch()
     build_build_var_cache
     if [ $? -ne 0 ]
     then
-        echo
-        echo "** Don't have a product spec for: '$product'"
-        echo "** Do you have the right repo manifest?"
-        product=
-    fi
-
-    if [ -z "$product" -o -z "$variant" ]
-    then
-        echo
         return 1
     fi
 
@@ -1524,6 +1489,43 @@ function _wrap_build()
     return $ret
 }
 
+function call_hook
+{
+    if [ "$2" = "-h" ] ||[ "$2" = "clean" ] ||[ "$2" = "--help" ]; then
+        return 0
+    fi
+    local T=$(gettop)
+    local ARGS
+    if [ "$T" ]; then
+        if [ "$1" = "m" ] ||  [ "$1" = "make" ] || [ "$1" = "mma" ] ||  [ "$1" = "mmma" ]; then
+            ARGS=$T
+        elif [ "$1" = "mm" ]; then
+            ARGS=`/bin/pwd`
+        elif [ "$1" = "mmm" ]; then
+            local DIRS=$(echo "${@:2}" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+            local prefix=`/bin/pwd`
+            for dir in $DIRS
+            do
+                ARGS+=$prefix"/"$dir" "
+            done
+            echo $ARGS
+        fi
+        if [ -e $T/${QCPATH}/common/restriction_checker/restriction_checker.py ]; then
+            python $T/${QCPATH}/common/restriction_checker/restriction_checker.py $T $ARGS
+        else
+            echo "Restriction Checker not present, skipping.."
+        fi
+        local ret_val=$?
+        if [ $ret_val -ne 0 ]; then
+            echo "Violations detected, aborting build."
+        fi
+        return $ret_val
+    else
+        echo "Couldn't locate the top of the tree.  Try setting TOP."
+        return 1
+    fi
+}
+
 function _trigger_build()
 (
     local -r bc="$1"; shift
@@ -1536,31 +1538,86 @@ function _trigger_build()
 
 function m()
 (
+    call_hook ${FUNCNAME[0]} $@
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
     _trigger_build "all-modules" "$@"
 )
 
 function mm()
 (
+    call_hook ${FUNCNAME[0]} $@
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
     _trigger_build "modules-in-a-dir-no-deps" "$@"
 )
 
 function mmm()
 (
+    call_hook ${FUNCNAME[0]} $@
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
     _trigger_build "modules-in-dirs-no-deps" "$@"
 )
 
 function mma()
 (
+    call_hook ${FUNCNAME[0]} $@
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
     _trigger_build "modules-in-a-dir" "$@"
 )
 
 function mmma()
 (
+    call_hook ${FUNCNAME[0]} $@
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
     _trigger_build "modules-in-dirs" "$@"
 )
 
 function make()
 {
+    call_hook ${FUNCNAME[0]} $@
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    if [ -f $ANDROID_BUILD_TOP/$QTI_BUILDTOOLS_DIR/build/update-vendor-hal-makefiles.sh ]; then
+        vendor_hal_script=$ANDROID_BUILD_TOP/$QTI_BUILDTOOLS_DIR/build/update-vendor-hal-makefiles.sh
+        source $vendor_hal_script --check
+        regen_needed=$?
+    else
+        vendor_hal_script=$ANDROID_BUILD_TOP/device/qcom/common/vendor_hal_makefile_generator.sh
+        regen_needed=1
+    fi
+
+    if [ $regen_needed -eq 1 ]; then
+        _wrap_build $(get_make_command hidl-gen) hidl-gen ALLOW_MISSING_DEPENDENCIES=true
+        RET=$?
+        if [ $RET -ne 0 ]; then
+            echo -n "${color_failed}#### hidl-gen compilation failed, check above errors"
+            echo " ####${color_reset}"
+            return $RET
+        fi
+        source $vendor_hal_script
+        RET=$?
+        if [ $RET -ne 0 ]; then
+            echo -n "${color_failed}#### HAL file .bp generation failed dure to incpomaptible HAL files , please check above error log"
+            echo " ####${color_reset}"
+            return $RET
+        fi
+    fi
     _wrap_build $(get_make_command "$@") "$@"
 }
 
@@ -1656,4 +1713,4 @@ addcompletions
 
 export ANDROID_BUILD_TOP=$(gettop)
 
-. $ANDROID_BUILD_TOP/vendor/aosp/build/envsetup.sh
+. $ANDROID_BUILD_TOP/vendor/extended/build/envsetup.sh

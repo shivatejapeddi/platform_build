@@ -35,24 +35,24 @@ endif
 my_soong_problems :=
 
 # Automatically replace the old-style kernel header include with a dependency
-# on the generated_kernel_headers header library
+# on the qti_kernel_headers header library
 ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,$(LOCAL_C_INCLUDES)))
   LOCAL_C_INCLUDES := $(patsubst $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,,$(LOCAL_C_INCLUDES))
-  LOCAL_HEADER_LIBRARIES += generated_kernel_headers
+  LOCAL_HEADER_LIBRARIES += qti_kernel_headers
 endif
 ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/techpack/audio/include,$(LOCAL_C_INCLUDES)))
   LOCAL_C_INCLUDES := $(patsubst $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/techpack/audio/include,,$(LOCAL_C_INCLUDES))
-  LOCAL_HEADER_LIBRARIES += generated_kernel_headers
+  LOCAL_HEADER_LIBRARIES += qti_kernel_headers
 endif
 
 # Some qcom binaries use this weird -isystem include...
 ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,$(LOCAL_CFLAGS)))
   LOCAL_CFLAGS := $(patsubst -isystem $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,,$(LOCAL_CFLAGS))
-  LOCAL_HEADER_LIBRARIES += generated_kernel_headers
+  LOCAL_HEADER_LIBRARIES += qti_kernel_headers
 endif
 
 # Remove KERNEL_OBJ/usr from any LOCAL_ADDITIONAL_DEPENDENCIES, we will
-# just include generated_kernel_headers which already has the proper
+# just include qti_kernel_headers which already has the proper
 # dependency
 ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr,$(LOCAL_ADDITIONAL_DEPENDENCIES)))
   LOCAL_ADDITIONAL_DEPENDENCIES := $(patsubst $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr,,$(LOCAL_ADDITIONAL_DEPENDENCIES))
@@ -130,6 +130,8 @@ my_ndk_sysroot_include :=
 my_ndk_sysroot_lib :=
 my_api_level := 10000
 
+my_arch := $(TARGET_$(LOCAL_2ND_ARCH_VAR_PREFIX)ARCH)
+
 ifneq ($(LOCAL_SDK_VERSION),)
   ifdef LOCAL_IS_HOST_MODULE
     $(error $(LOCAL_PATH): LOCAL_SDK_VERSION cannot be used in host module)
@@ -149,7 +151,6 @@ ifneq ($(LOCAL_SDK_VERSION),)
     endif
   endif
 
-  my_arch := $(TARGET_$(LOCAL_2ND_ARCH_VAR_PREFIX)ARCH)
   ifneq (,$(filter arm64 mips64 x86_64,$(my_arch)))
     my_min_sdk_version := 21
   else
@@ -406,6 +407,17 @@ my_clang := $(strip $(LOCAL_CLANG_$($(my_prefix)$(LOCAL_2ND_ARCH_VAR_PREFIX)ARCH
 endif
 ifeq ($(my_clang),false)
     $(call pretty-error,LOCAL_CLANG false is no longer supported)
+endif
+
+my_sdclang := $(strip $(LOCAL_SDCLANG))
+ifeq ($(SDCLANG),true)
+    ifeq ($(my_sdclang),)
+        my_sdclang := true
+    endif
+endif
+
+ifeq ($(FORCE_SDCLANG_OFF),true)
+    my_sdclang := false
 endif
 
 ifeq ($(LOCAL_C_STD),)
@@ -675,7 +687,7 @@ my_proto_source_suffix := .c
 my_proto_c_includes := external/nanopb-c
 my_protoc_flags := --nanopb_out=$(proto_gen_dir) \
     --plugin=$(HOST_OUT_EXECUTABLES)/protoc-gen-nanopb
-my_protoc_deps := $(NANOPB_SRCS) $(proto_sources_fullpath:%.proto=%.options)
+my_protoc_deps := $(NANOPB_SRCS) $(wildcard $(proto_sources_fullpath:%.proto=%.options))
 else
 my_proto_source_suffix := $(LOCAL_CPP_EXTENSION)
 ifneq ($(my_proto_source_suffix),.cc)
@@ -1113,37 +1125,39 @@ asm_objects += $(asm_objects_asm)
 endif
 
 ###################################################################
+## Convert to sanitized names where they exist.
+## These lists come from sanitizerStaticLibsMap; see
+## build/soong/cc/sanitize.go
+##
+## $(1): list of static dependencies
+## $(2): name of sanitizer (e.g. cfi, hwasan)
+##################################################################
+define use_soong_sanitized_static_libraries
+  $(foreach lib,$(1),$(if $(filter $(lib),\
+      $(SOONG_$(2)_$(my_image_variant)_$(my_arch)_STATIC_LIBRARIES)),\
+      $(lib).$(2),$(lib)))
+endef
+
+###################################################################
 ## When compiling a CFI enabled target, use the .cfi variant of any
 ## static dependencies (where they exist).
 ##################################################################
-define use_soong_cfi_static_libraries
-  $(foreach l,$(1),$(if $(filter $(l),$(SOONG_CFI_STATIC_LIBRARIES)),\
-      $(l).cfi,$(l)))
-endef
-
 ifneq ($(filter cfi,$(my_sanitize)),)
-  my_whole_static_libraries := $(call use_soong_cfi_static_libraries,\
-    $(my_whole_static_libraries))
-  my_static_libraries := $(call use_soong_cfi_static_libraries,\
-    $(my_static_libraries))
+  my_whole_static_libraries := $(call use_soong_sanitized_static_libraries,\
+    $(my_whole_static_libraries),cfi)
+  my_static_libraries := $(call use_soong_sanitized_static_libraries,\
+    $(my_static_libraries),cfi)
 endif
 
-ifneq ($(LOCAL_USE_VNDK),)
-  my_soong_hwasan_static_libraries := $(SOONG_HWASAN_VENDOR_STATIC_LIBRARIES)
-else
-  my_soong_hwasan_static_libraries = $(SOONG_HWASAN_STATIC_LIBRARIES)
-endif
-
-define use_soong_hwasan_static_libraries
-  $(foreach l,$(1),$(if $(filter $(l),$(my_soong_hwasan_static_libraries)),\
-      $(l).hwasan,$(l)))
-endef
-
+###################################################################
+## When compiling a hwasan enabled target, use the .hwasan variant
+## of any static dependencies (where they exist).
+##################################################################
 ifneq ($(filter hwaddress,$(my_sanitize)),)
-  my_whole_static_libraries := $(call use_soong_hwasan_static_libraries,\
-    $(my_whole_static_libraries))
-  my_static_libraries := $(call use_soong_hwasan_static_libraries,\
-    $(my_static_libraries))
+  my_whole_static_libraries := $(call use_soong_sanitized_static_libraries,\
+    $(my_whole_static_libraries),hwasan)
+  my_static_libraries := $(call use_soong_sanitized_static_libraries,\
+    $(my_static_libraries),hwasan)
 endif
 
 ###########################################################
@@ -1339,12 +1353,24 @@ endif
 
 my_c_includes := $(foreach inc,$(my_c_includes),$(call clean-path,$(inc)))
 
+# Find $1 in the exception project list.
+define find_in_cincludes_exception_projects
+$(subst $(space),, \
+  $(foreach project,$(TARGET_CINCLUDES_EXCEPTION_PROJECTS), \
+    $(if $(filter $(project)%,$(1)),$(project)) \
+  ) \
+)
+endef
+
 my_outside_includes := $(filter-out $(OUT_DIR)/%,$(filter /%,$(my_c_includes)) $(filter ../%,$(my_c_includes)))
 ifneq ($(my_outside_includes),)
-  ifeq ($(BUILD_BROKEN_OUTSIDE_INCLUDE_DIRS),true)
-    $(call pretty-warning,C_INCLUDES must be under the source or output directories: $(my_outside_includes))
-  else
-    $(call pretty-error,C_INCLUDES must be under the source or output directories: $(my_outside_includes))
+# Further filter out optional exceptions
+  ifeq ($(call find_in_cincludes_exception_projects,$(LOCAL_MODULE_MAKEFILE)),)
+    ifeq ($(BUILD_BROKEN_OUTSIDE_INCLUDE_DIRS),true)
+      $(call pretty-warning,C_INCLUDES must be under the source or output directories: $(my_outside_includes))
+    else
+      $(call pretty-error,C_INCLUDES must be under the source or output directories: $(my_outside_includes))
+    endif
   endif
 endif
 
@@ -1666,6 +1692,17 @@ ifeq ($(my_use_clang_lld),true)
 else
   my_target_global_ldflags := $($(LOCAL_2ND_ARCH_VAR_PREFIX)CLANG_$(my_prefix)GLOBAL_LDFLAGS)
 endif # my_use_clang_lld
+ifeq ($(my_sdclang),true)
+    ifeq ($(strip $(my_cc)),)
+        my_cc := $(SDCLANG_PATH)/clang
+    endif
+    ifeq ($(strip $(my_cxx)),)
+        my_cxx := $(SDCLANG_PATH)/clang++
+    endif
+    ifeq ($(strip $(my_cxx_link)),)
+        my_cxx_link := $(SDCLANG_PATH)/clang++
+    endif
+endif
 
 my_target_triple := $($(LOCAL_2ND_ARCH_VAR_PREFIX)CLANG_$(my_prefix)TRIPLE)
 ifndef LOCAL_IS_HOST_MODULE
@@ -1743,6 +1780,8 @@ imported_includes := $(strip \
 
 $(foreach dep,$(imported_includes),\
   $(eval EXPORTS.$$(dep).USERS := $$(EXPORTS.$$(dep).USERS) $$(all_objects)))
+
+ALL_MODULES.$(my_register_name).IMPORTS := $(imported_includes)
 
 ###########################################################
 ## Define PRIVATE_ variables used by multiple module types

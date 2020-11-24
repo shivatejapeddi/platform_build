@@ -277,7 +277,7 @@ METADATA_NAME = 'META-INF/com/android/metadata'
 POSTINSTALL_CONFIG = 'META/postinstall_config.txt'
 DYNAMIC_PARTITION_INFO = 'META/dynamic_partitions_info.txt'
 AB_PARTITIONS = 'META/ab_partitions.txt'
-UNZIP_PATTERN = ['IMAGES/*', 'INSTALL/*', 'META/*', 'OTA/*', 'RADIO/*']
+UNZIP_PATTERN = ['IMAGES/*', 'META/*', 'OTA/*', 'RADIO/*', 'INSTALL/*']
 # Files to be unzipped for target diffing purpose.
 TARGET_DIFFING_UNZIP_PATTERN = ['BOOT', 'RECOVERY', 'SYSTEM/*', 'VENDOR/*',
                                 'PRODUCT/*', 'SYSTEM_EXT/*', 'ODM/*']
@@ -822,20 +822,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   # Dump fingerprints
   script.Print("Target: {}".format(target_info.fingerprint))
 
-  #Print ASCII
-  script.Print("--------------------------------------------------");
-  script.Print("|                    __                          |");
-  script.Print("|        /\  _  _ _ |_   |_ _  _  _| _  _|       |");
-  script.Print("|       /--\(_)_)|_)|__><|_(-`| )(_|(-`(_|       |");
-  script.Print("|                |                               |");
-  script.Print("|                                                |");
-  script.Print("--------------------------------------------------");
-  script.Print("--------------------------------------------------");
-  script.Print("|                  By:-TeamAEX                   |");
-  script.Print("--------------------------------------------------");
-  script.Print(" ")
-  script.AppendExtra("sleep (2);")
-
   device_specific.FullOTA_InstallBegin()
 
   CopyInstallTools(output_zip)
@@ -855,34 +841,6 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
   # the update of the system partition takes the remaining progress.
   system_progress = 0.9 - (len(block_diff_dict) - 1) * 0.1
 
-  if target_info.GetBuildProp("ro.extended.display.version") is not None:
-    buildid = target_info.GetBuildProp("ro.extended.display.version")
-    buildidn = target_info.GetBuildProp("ro.build.id")
-    buildday = target_info.GetBuildProp("ro.build.date")
-    securep = target_info.GetBuildProp("ro.build.version.security_patch")
-    device = target_info.GetBuildProp("ro.aex.device")
-    androidver = target_info.GetBuildProp("ro.build.version.release")
-    manifacturer = target_info.GetBuildProp("ro.product.manufacturer")
-    sdkver = target_info.GetBuildProp("ro.build.version.sdk")
-    script.Print("-------------------- Software --------------------");
-    script.Print(" OS version: %s"%(buildid));
-    script.Print("");
-    script.Print(" Android version: %s"%(androidver));
-    script.Print("");
-    script.Print(" Security patch: %s"%(securep));
-    script.Print("");
-    script.Print(" SDK version: %s"%(sdkver));
-    script.Print("");
-    script.Print(" Build ID: %s"%(buildidn));
-    script.Print("");
-    script.Print(" Build date: %s"%(buildday));
-    script.Print("-------------------- Hardware --------------------");
-    script.Print(" Device codename: %s"%(device));
-    script.Print("");
-    script.Print(" Manufacturer: %s"%(manifacturer));
-    script.Print("");
-    script.Print("--------------------------------------------------");
-
   if OPTIONS.wipe_user_data:
     system_progress -= 0.1
   progress_dict = {partition: 0.1 for partition in block_diff_dict}
@@ -895,7 +853,7 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
         info_dict=OPTIONS.info_dict,
         block_diffs=block_diff_dict.values(),
         progress_dict=progress_dict,
-        build_without_vendor=(not HasPartition(input_zip, "vendor")))
+        build_without_vendor=(not HasVendorPartition(input_zip)))
     dynamic_partitions_diff.WriteScript(script, output_zip,
                                         write_verify_script=OPTIONS.verify)
   else:

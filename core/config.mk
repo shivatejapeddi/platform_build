@@ -32,6 +32,9 @@ ifdef KATI_PACKAGE_MK_DIR
   .KATI_READONLY := KATI_PACKAGE_MK_DIR
 endif
 
+# add flag to indicate pure AOSP or not.
+TARGET_FWK_SUPPORTS_FULL_VALUEADDS := true
+
 # Mark variables deprecated/obsolete
 CHANGES_URL := https://android.googlesource.com/platform/build/+/master/Changes.md
 .KATI_READONLY := CHANGES_URL
@@ -42,7 +45,7 @@ $(KATI_obsolete_var ANDROID_HOST_OUT,Use HOST_OUT instead. See $(CHANGES_URL)#AN
 $(KATI_obsolete_var ANDROID_PRODUCT_OUT,Use PRODUCT_OUT instead. See $(CHANGES_URL)#ANDROID_PRODUCT_OUT)
 $(KATI_obsolete_var ANDROID_HOST_OUT_TESTCASES,Use HOST_OUT_TESTCASES instead. See $(CHANGES_URL)#ANDROID_HOST_OUT_TESTCASES)
 $(KATI_obsolete_var ANDROID_TARGET_OUT_TESTCASES,Use TARGET_OUT_TESTCASES instead. See $(CHANGES_URL)#ANDROID_TARGET_OUT_TESTCASES)
-$(KATI_obsolete_var ANDROID_BUILD_TOP,Use '.' instead. See $(CHANGES_URL)#ANDROID_BUILD_TOP)
+$(KATI_deprecated_var ANDROID_BUILD_TOP,Use '.' instead. See $(CHANGES_URL)#ANDROID_BUILD_TOP)
 $(KATI_obsolete_var \
   ANDROID_TOOLCHAIN \
   ANDROID_TOOLCHAIN_2ND_ARCH \
@@ -294,8 +297,8 @@ include $(BUILD_SYSTEM)/envsetup.mk
 # See envsetup.mk for a description of SCAN_EXCLUDE_DIRS
 FIND_LEAVES_EXCLUDES := $(addprefix --prune=, $(SCAN_EXCLUDE_DIRS) .repo .git)
 
-ifneq ($(AOSP_BUILD),)
-include vendor/aosp/config/BoardConfigAosp.mk
+ifneq ($(EXTENDED_BUILD),)
+include vendor/extended/config/BoardConfigAosp.mk
 endif
 
 # The build system exposes several variables for where to find the kernel
@@ -670,6 +673,13 @@ EXTRACT_KERNEL := build/make/tools/extract_kernel.py
 
 # Path to tools.jar
 HOST_JDK_TOOLS_JAR := $(ANDROID_JAVA8_HOME)/lib/tools.jar
+
+# It's called md5 on Mac OS and md5sum on Linux
+ifeq ($(HOST_OS),darwin)
+MD5:=md5 -q
+else
+MD5:=md5sum
+endif
 
 APICHECK_COMMAND := $(JAVA) -Xmx4g -jar $(APICHECK) --no-banner --compatible-output=yes
 
@@ -1234,6 +1244,7 @@ dont_bother_goals := out \
     product-graph dump-products
 
 ifeq ($(CALLED_FROM_SETUP),true)
+include $(BUILD_SYSTEM)/android_soong_config_vars.mk
 include $(BUILD_SYSTEM)/ninja_config.mk
 include $(BUILD_SYSTEM)/soong_config.mk
 endif
@@ -1243,13 +1254,8 @@ endif
 DEFAULT_DATA_OUT_MODULES := ltp $(ltp_packages) $(kselftest_modules)
 .KATI_READONLY := DEFAULT_DATA_OUT_MODULES
 
-ifneq ($(AOSP_BUILD),)
-ifneq ($(wildcard device/aosp/sepolicy/common/sepolicy.mk),)
-## We need to be sure the global selinux policies are included
-## last, to avoid accidental resetting by device configs
-$(eval include device/aosp/sepolicy/common/sepolicy.mk)
-endif
-endif
+# Make RECORD_ALL_DEPS readonly and also set it if deps-license is a goal.
+RECORD_ALL_DEPS :=$= $(filter true,$(RECORD_ALL_DEPS))$(filter deps-license,$(MAKECMDGOALS))
 
 # Include any vendor specific config.mk file
 -include vendor/*/build/core/config.mk

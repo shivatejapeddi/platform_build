@@ -18,18 +18,14 @@
 $(call inherit-product, $(SRC_TARGET_DIR)/product/handheld_product.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/telephony_product.mk)
 
-ifeq ($(AOSP_BUILD),)
 # Default AOSP sounds
 $(call inherit-product-if-exists, frameworks/base/data/sounds/AllAudio.mk)
 
 # Additional settings used in all AOSP builds
 PRODUCT_PRODUCT_PROPERTIES += \
     ro.config.ringtone=Ring_Synth_04.ogg \
-    ro.config.notification_sound=pixiedust.ogg
-endif
-
-PRODUCT_PRODUCT_PROPERTIES += \
-    ro.com.android.dataroaming=true
+    ro.config.notification_sound=pixiedust.ogg \
+    ro.com.android.dataroaming=true \
 
 # More AOSP packages
 PRODUCT_PACKAGES += \
@@ -40,7 +36,7 @@ PRODUCT_PACKAGES += \
 
 # Telephony:
 #   Provide a APN configuration to GSI product
-ifeq ($(AOSP_BUILD),)
+ifeq ($(EXTENDED_BUILD),)
 PRODUCT_COPY_FILES += \
     device/sample/etc/apns-full-conf.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/apns-conf.xml
 endif

@@ -33,7 +33,6 @@ $(call add_json_str,  Platform_sdk_codename,             $(PLATFORM_VERSION_CODE
 $(call add_json_bool, Platform_sdk_final,                $(filter REL,$(PLATFORM_VERSION_CODENAME)))
 $(call add_json_csv,  Platform_version_active_codenames, $(PLATFORM_VERSION_ALL_CODENAMES))
 $(call add_json_str,  Platform_security_patch,           $(PLATFORM_SECURITY_PATCH))
-$(call add_json_str,  Platform_security_patch_ex,        $(PLATFORM_SECURITY_PATCH_EX))
 $(call add_json_str,  Platform_preview_sdk_version,      $(PLATFORM_PREVIEW_SDK_VERSION))
 $(call add_json_str,  Platform_base_os,                  $(PLATFORM_BASE_OS))
 
@@ -103,6 +102,10 @@ $(call add_json_bool, EnableCFI,                         $(call invert_bool,$(fi
 $(call add_json_list, CFIExcludePaths,                   $(CFI_EXCLUDE_PATHS) $(PRODUCT_CFI_EXCLUDE_PATHS))
 $(call add_json_list, CFIIncludePaths,                   $(CFI_INCLUDE_PATHS) $(PRODUCT_CFI_INCLUDE_PATHS))
 $(call add_json_list, IntegerOverflowExcludePaths,       $(INTEGER_OVERFLOW_EXCLUDE_PATHS) $(PRODUCT_INTEGER_OVERFLOW_EXCLUDE_PATHS))
+$(call add_json_list, IntegerOverflowIncludePaths,       $(INTEGER_OVERFLOW_INCLUDE_PATHS) $(PRODUCT_INTEGER_OVERFLOW_INCLUDE_PATHS))
+
+$(call add_json_list, BoundSanitizerExcludePaths ,	 	 $(BOUNDS_EXCLUDE_PATHS) $(PRODUCT_BOUNDS_EXCLUDE_PATHS))
+$(call add_json_list, BoundSanitizerIncludePaths ,       $(BOUNDS_INCLUDE_PATHS) $(PRODUCT_BOUNDS_INCLUDE_PATHS))
 
 $(call add_json_bool, Experimental_mte,                  $(filter true,$(TARGET_EXPERIMENTAL_MTE)))
 
@@ -128,8 +131,9 @@ $(call add_json_bool, SamplingPGO,                       $(filter true,$(SAMPLIN
 $(call add_json_bool, ArtUseReadBarrier,                 $(call invert_bool,$(filter false,$(PRODUCT_ART_USE_READ_BARRIER))))
 $(call add_json_bool, Binder32bit,                       $(BINDER32BIT))
 $(call add_json_str,  BtConfigIncludeDir,                $(BOARD_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR))
+$(call add_json_bool, Device_support_hwfde,              $(filter true,$(TARGET_HW_DISK_ENCRYPTION)))
+$(call add_json_bool, Device_support_hwfde_perf,         $(filter true,$(TARGET_HW_DISK_ENCRYPTION_PERF)))
 $(call add_json_list, DeviceKernelHeaders,               $(TARGET_PROJECT_SYSTEM_INCLUDES))
-$(call add_json_str,  TargetSpecificHeaderPath,          $(TARGET_SPECIFIC_HEADER_PATH))
 $(call add_json_bool, DevicePrefer32BitApps,             $(filter true,$(TARGET_PREFER_32_BIT_APPS)))
 $(call add_json_bool, DevicePrefer32BitExecutables,      $(filter true,$(TARGET_PREFER_32_BIT_EXECUTABLES)))
 $(call add_json_str,  DeviceVndkVersion,                 $(BOARD_VNDK_VERSION))
@@ -140,7 +144,6 @@ $(call add_json_bool, BoardVndkRuntimeDisable,           $(BOARD_VNDK_RUNTIME_DI
 $(call add_json_list, DeviceSystemSdkVersions,           $(BOARD_SYSTEMSDK_VERSIONS))
 $(call add_json_list, Platform_systemsdk_versions,       $(PLATFORM_SYSTEMSDK_VERSIONS))
 $(call add_json_bool, Malloc_not_svelte,                 $(call invert_bool,$(filter true,$(MALLOC_SVELTE))))
-$(call add_json_bool, Malloc_not_svelte_libc32,          $(call invert_bool,$(filter true,$(MALLOC_SVELTE_FOR_LIBC32))))
 $(call add_json_str,  Override_rs_driver,                $(OVERRIDE_RS_DRIVER))
 
 $(call add_json_bool, UncompressPrivAppDex,              $(call invert_bool,$(filter true,$(DONT_UNCOMPRESS_PRIV_APPS_DEXS))))
@@ -171,6 +174,8 @@ $(call add_json_bool, UseRBEJAVAC,                       $(filter-out false,$(RB
 $(call add_json_bool, UseRBER8,                          $(filter-out false,$(RBE_R8)))
 $(call add_json_bool, UseRBED8,                          $(filter-out false,$(RBE_D8)))
 $(call add_json_bool, Arc,                               $(filter true,$(TARGET_ARC)))
+$(call add_json_bool, Qmaa_hal,                          $(filter true,$(TARGET_USES_QMAA_HAL)))
+$(call add_json_bool, Real_hal,                          $(filter true,$(TARGET_USES_REAL_HAL)))
 
 $(call add_json_list, NamespacesToExport,                $(PRODUCT_SOONG_NAMESPACES))
 
@@ -219,7 +224,7 @@ $(call add_json_bool, InstallExtraFlattenedApexes, $(PRODUCT_INSTALL_EXTRA_FLATT
 
 $(call add_json_bool, BoardUsesRecoveryAsBoot, $(BOARD_USES_RECOVERY_AS_BOOT))
 
-include vendor/aosp/build/soong/soong_config.mk
+include vendor/extended/build/soong/soong_config.mk
 
 $(call json_end)
 
